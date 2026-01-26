@@ -1,0 +1,8 @@
+{
+  "name": "somersetgrove chatbot",
+  "description": "A high-fidelity ChatGPT-style AI chat interface with file upload capabilities and webhook integration.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
