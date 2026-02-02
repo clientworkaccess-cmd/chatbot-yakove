@@ -6,6 +6,7 @@ import { ChatInput } from './ChatInput';
 import { v4 as uuidv4 } from 'uuid';
 import { sendToWebhook } from '../services/webhookService';
 import { Sparkles, ArrowDown, PanelLeft } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface ChatAreaProps {
   session?: ChatSession;
@@ -22,6 +23,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   isSidebarOpen,
   setIsSidebarOpen,
 }) => {
+  const { profile } = useAuth();
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -44,14 +46,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         session.messages.length === 1 && 
         session.messages[0].role === 'user' && 
         !isTyping &&
-        !processedSessions.current.has(session.id)
+        !processedSessions.current.has(session.id) &&
+        profile
       ) {
         processedSessions.current.add(session.id);
         const userMsg = session.messages[0];
         
         setIsTyping(true);
         try {
-          const responseText = await sendToWebhook(userMsg.content, userMsg.attachments || [], session.id);
+          const responseText = await sendToWebhook(
+            userMsg.content, 
+            userMsg.attachments || [], 
+            session.id,
+            profile.id,
+            profile.email
+          );
           const assistantMessage: Message = {
             id: uuidv4(),
             role: 'assistant',
@@ -74,7 +83,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     };
 
     handleInitialMessage();
-  }, [session?.id, session?.messages.length]);
+  }, [session?.id, session?.messages.length, profile]);
 
   const handleScroll = () => {
     if (containerRef.current) {
@@ -84,6 +93,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   };
 
   const handleSendMessage = async (text: string, attachments: Attachment[]) => {
+    if (!profile) return;
+
     if (!session) {
       // Create new session with the initial message
       onNewChat(text, attachments);
@@ -103,7 +114,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setIsTyping(true);
 
     try {
-      const responseText = await sendToWebhook(text, attachments, session.id);
+      const responseText = await sendToWebhook(
+        text, 
+        attachments, 
+        session.id,
+        profile.id,
+        profile.email
+      );
       
       const assistantMessage: Message = {
         id: uuidv4(),

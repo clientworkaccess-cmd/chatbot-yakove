@@ -5,6 +5,7 @@ export type UserRole = 'user' | 'admin';
 export interface UserProfile {
   id: string;
   email: string;
+  full_name?: string;
   role: UserRole;
   is_approved: boolean;
 }
@@ -38,4 +39,14 @@ export interface WebhookResponse {
   text?: string;
   response?: string;
   message?: string;
+}
+
+export interface Task {
+  id: string;
+  name: string;
+}
+
+export interface WorkerTasks {
+  worker: string;
+  tasks: Task[];
 }

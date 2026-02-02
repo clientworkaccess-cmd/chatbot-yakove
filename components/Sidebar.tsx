@@ -12,7 +12,8 @@ import {
   X,
   Search,
   LogOut,
-  Shield
+  Shield,
+  Briefcase
 } from 'lucide-react';
 import { ChatSession } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -30,6 +31,8 @@ interface SidebarProps {
   isDarkMode: boolean;
   toggleTheme: () => void;
   onOpenAdmin?: () => void;
+  onOpenTaskUpdate?: () => void;
+  activeView?: 'chat' | 'admin' | 'task-update';
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -45,6 +48,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isDarkMode,
   toggleTheme,
   onOpenAdmin,
+  onOpenTaskUpdate,
+  activeView
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -106,6 +111,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 space-y-1">
+          {/* Tool Section (Only for non-admins) */}
+          {!isAdmin && onOpenTaskUpdate && (
+            <div className="mb-4">
+               <div className="px-3 py-2 mt-2 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                Tools
+              </div>
+              
+              <div 
+                onClick={onOpenTaskUpdate}
+                className={`group flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition-colors ${
+                  activeView === 'task-update'
+                    ? 'bg-gray-200 dark:bg-[#2d2d2d] text-gray-900 dark:text-white' 
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#212121]'
+                }`}
+              >
+                <Briefcase size={16} className="shrink-0" />
+                <span className="flex-1 text-sm">Task Update</span>
+              </div>
+            </div>
+          )}
+
           <div className="px-3 py-2 mt-2 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
             Your chats
           </div>
@@ -119,7 +145,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={session.id}
                 onClick={() => setCurrentSessionId(session.id)}
                 className={`group relative flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition-colors ${
-                  currentSessionId === session.id 
+                  activeView === 'chat' && currentSessionId === session.id 
                     ? 'bg-gray-200 dark:bg-[#2d2d2d] text-gray-900 dark:text-white' 
                     : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#212121]'
                 }`}
@@ -173,7 +199,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {isAdmin && (
             <button 
               onClick={onOpenAdmin}
-              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-md transition-colors font-medium"
+              className={`w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-md transition-colors font-medium ${
+                activeView === 'admin' ? 'text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/10' : 'text-blue-600 dark:text-blue-400'
+              }`}
             >
               <Shield size={16} />
               Admin Dashboard
@@ -198,11 +226,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           
           <div className="pt-2 mt-1 border-t border-gray-100 dark:border-gray-800">
             <div className="px-3 py-2 flex items-center gap-3 mb-1">
-              <div className="w-8 h-8 rounded bg-purple-500 flex items-center justify-center text-white text-xs font-bold">
+              <div className="w-8 h-8 rounded bg-purple-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
                 {profile?.email?.charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 overflow-hidden">
-                <p className="text-xs font-medium truncate text-gray-700 dark:text-gray-200">{profile?.email}</p>
+                {profile?.full_name && (
+                  <p className="text-xs font-semibold truncate text-gray-800 dark:text-gray-100">{profile.full_name}</p>
+                )}
+                <p className="text-[10px] truncate text-gray-500 dark:text-gray-400">{profile?.email}</p>
               </div>
             </div>
             <button 

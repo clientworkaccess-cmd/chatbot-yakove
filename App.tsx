@@ -2,23 +2,29 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
-import { ChatSession, Message, Attachment } from './types';
+import { ChatSession, Message, Attachment, WorkerTasks } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthScreen } from './components/Auth/AuthScreen';
 import { AdminDashboard } from './components/Admin/AdminDashboard';
+import { TaskUpdateView } from './components/TaskUpdateView';
 import { Loader2, Lock, AlertTriangle } from 'lucide-react';
+import { getWorkerTasks } from './services/webhookService';
 
 const LOCAL_STORAGE_KEY = 'somersetgrove_chat_sessions';
 const THEME_KEY = 'somersetgrove_theme';
 
+type ViewState = 'chat' | 'admin' | 'task-update';
+
 const MainApp: React.FC = () => {
-  const { session, loading, isApproved, isAdmin, signOut, error: authError } = useAuth();
+  const { session, loading, isApproved, isAdmin, signOut, error: authError, profile } = useAuth();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [showAdmin, setShowAdmin] = useState(false);
+  const [currentView, setCurrentView] = useState<ViewState>('chat');
+  const [taskLoading, setTaskLoading] = useState(false);
+  const [taskResult, setTaskResult] = useState<WorkerTasks[] | null>(null);
 
   // Initialize data from local storage
   useEffect(() => {
@@ -73,7 +79,24 @@ const MainApp: React.FC = () => {
     };
     setSessions(prev => [newSession, ...prev]);
     setCurrentSessionId(newId);
+    setCurrentView('chat');
   }, []);
+
+  const handleGetTasks = async () => {
+    if (!profile) return;
+    setTaskLoading(true);
+    setTaskResult(null);
+
+    try {
+      // Fetch data directly without creating a chat session
+      const response = await getWorkerTasks(profile.id, profile.email, profile.full_name);
+      setTaskResult(response);
+    } catch (error) {
+      alert("Failed to retrieve tasks. Please try again.");
+    } finally {
+      setTaskLoading(false);
+    }
+  };
 
   const deleteSession = useCallback((id: string) => {
     setSessions(prev => prev.filter(s => s.id !== id));
@@ -126,7 +149,7 @@ const MainApp: React.FC = () => {
     return <AuthScreen />;
   }
 
-  // 3. Database Error (e.g., Infinite Recursion)
+  // 3. Database Error
   if (authError) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-white dark:bg-[#212121] p-6 text-center">
@@ -134,18 +157,8 @@ const MainApp: React.FC = () => {
           <AlertTriangle size={32} />
         </div>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">System Error</h2>
-        <p className="text-gray-500 dark:text-gray-400 max-w-md mb-8">
-          {authError}
-        </p>
-        <p className="text-sm text-gray-400 mb-8 max-w-md">
-          This usually happens if the Database Row Level Security (RLS) policies are configured incorrectly. Please run the SQL fix provided in the chat.
-        </p>
-        <button 
-          onClick={() => signOut()}
-          className="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg text-gray-800 dark:text-white transition-colors"
-        >
-          Sign Out
-        </button>
+        <p className="text-gray-500 dark:text-gray-400 max-w-md mb-8">{authError}</p>
+        <button onClick={() => signOut()} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg text-gray-800 dark:text-white transition-colors">Sign Out</button>
       </div>
     );
   }
@@ -161,28 +174,21 @@ const MainApp: React.FC = () => {
         <p className="text-gray-500 dark:text-gray-400 max-w-md mb-8">
           Your account has been created but requires administrator approval before you can access the chat application. Please check back later.
         </p>
-        <button 
-          onClick={() => signOut()}
-          className="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg text-gray-800 dark:text-white transition-colors"
-        >
-          Sign Out
-        </button>
+        <button onClick={() => signOut()} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg text-gray-800 dark:text-white transition-colors">Sign Out</button>
       </div>
     );
   }
 
-  // 5. Admin Dashboard
-  if (showAdmin && isAdmin) {
-    return <AdminDashboard onBack={() => setShowAdmin(false)} />;
-  }
-
-  // 6. Main Chat App
+  // 5. Views
   return (
     <div className="flex h-screen w-full overflow-hidden bg-white dark:bg-[#212121]">
       <Sidebar 
         sessions={sessions}
         currentSessionId={currentSessionId}
-        setCurrentSessionId={setCurrentSessionId}
+        setCurrentSessionId={(id) => {
+          setCurrentSessionId(id);
+          if (id) setCurrentView('chat');
+        }}
         onNewChat={() => createNewChat()}
         onDeleteChat={deleteSession}
         onRenameChat={renameSession}
@@ -191,17 +197,33 @@ const MainApp: React.FC = () => {
         setIsOpen={setIsSidebarOpen}
         isDarkMode={isDarkMode}
         toggleTheme={() => setIsDarkMode(!isDarkMode)}
-        onOpenAdmin={() => setShowAdmin(true)}
+        onOpenAdmin={() => setCurrentView('admin')}
+        onOpenTaskUpdate={() => {
+            setCurrentSessionId(null);
+            setCurrentView('task-update');
+            setTaskResult(null); // Reset result when opening view
+        }}
+        activeView={currentView}
       />
       
       <main className="flex-1 flex flex-col relative overflow-hidden">
-        <ChatArea 
-          session={currentSession}
-          onNewChat={createNewChat}
-          updateMessages={(msgs) => currentSessionId && updateMessages(currentSessionId, msgs)}
-          isSidebarOpen={isSidebarOpen}
-          setIsSidebarOpen={setIsSidebarOpen}
-        />
+        {currentView === 'admin' && isAdmin ? (
+          <AdminDashboard onBack={() => setCurrentView('chat')} />
+        ) : currentView === 'task-update' ? (
+          <TaskUpdateView 
+            onGetTasks={handleGetTasks} 
+            isLoading={taskLoading} 
+            result={taskResult}
+          />
+        ) : (
+          <ChatArea 
+            session={currentSession}
+            onNewChat={createNewChat}
+            updateMessages={(msgs) => currentSessionId && updateMessages(currentSessionId, msgs)}
+            isSidebarOpen={isSidebarOpen}
+            setIsSidebarOpen={setIsSidebarOpen}
+          />
+        )}
       </main>
     </div>
   );
