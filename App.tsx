@@ -2,14 +2,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
-import { ChatSession, Message, Attachment, WorkerTasks } from './types';
+import { ChatSession, Message, Attachment, WorkerTasks, Task } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthScreen } from './components/Auth/AuthScreen';
 import { AdminDashboard } from './components/Admin/AdminDashboard';
 import { TaskUpdateView } from './components/TaskUpdateView';
 import { Loader2, Lock, AlertTriangle } from 'lucide-react';
-import { getWorkerTasks } from './services/webhookService';
+import { supabase } from './services/supabaseClient';
 
 const LOCAL_STORAGE_KEY = 'somersetgrove_chat_sessions';
 const THEME_KEY = 'somersetgrove_theme';
@@ -88,10 +88,31 @@ const MainApp: React.FC = () => {
     setTaskResult(null);
 
     try {
-      // Fetch data directly without creating a chat session
-      const response = await getWorkerTasks(profile.id, profile.email, profile.full_name);
-      setTaskResult(response);
+      // Fetch all tasks so we can resolve dependencies across workers
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const allTasks = data as Task[];
+      const workerName = profile.full_name || profile.email.split('@')[0];
+
+      // Filter to only show the current worker's group (Satisfies "filter out based on name")
+      const myTasks = allTasks.filter(t => t.worker && t.worker.toLowerCase() === workerName.toLowerCase());
+
+      const groupedTasks: WorkerTasks[] = [{
+        worker: workerName,
+        tasks: myTasks
+      }];
+
+      // Store ALL tasks in the result so TaskUpdateView can use them for dependency checks
+      (groupedTasks[0] as any).allTasksInSystem = allTasks;
+
+      setTaskResult(groupedTasks);
     } catch (error) {
+      console.error("Failed to fetch tasks:", error);
       alert("Failed to retrieve tasks. Please try again.");
     } finally {
       setTaskLoading(false);
@@ -112,14 +133,14 @@ const MainApp: React.FC = () => {
   const updateMessages = useCallback((sessionId: string, newMessages: Message[]) => {
     setSessions(prev => prev.map(s => {
       if (s.id === sessionId) {
-        const title = s.title === 'New chat' && newMessages.length > 0 
-          ? newMessages[0].content.substring(0, 30) 
+        const title = s.title === 'New chat' && newMessages.length > 0
+          ? newMessages[0].content.substring(0, 30)
           : s.title;
-        return { 
-          ...s, 
-          messages: newMessages, 
+        return {
+          ...s,
+          messages: newMessages,
           title,
-          lastUpdated: Date.now() 
+          lastUpdated: Date.now()
         };
       }
       return s;
@@ -182,7 +203,7 @@ const MainApp: React.FC = () => {
   // 5. Views
   return (
     <div className="flex h-screen w-full overflow-hidden bg-white dark:bg-[#212121]">
-      <Sidebar 
+      <Sidebar
         sessions={sessions}
         currentSessionId={currentSessionId}
         setCurrentSessionId={(id) => {
@@ -199,24 +220,24 @@ const MainApp: React.FC = () => {
         toggleTheme={() => setIsDarkMode(!isDarkMode)}
         onOpenAdmin={() => setCurrentView('admin')}
         onOpenTaskUpdate={() => {
-            setCurrentSessionId(null);
-            setCurrentView('task-update');
-            setTaskResult(null); // Reset result when opening view
+          setCurrentSessionId(null);
+          setCurrentView('task-update');
+          setTaskResult(null); // Reset result when opening view
         }}
         activeView={currentView}
       />
-      
+
       <main className="flex-1 flex flex-col relative overflow-hidden">
         {currentView === 'admin' && isAdmin ? (
           <AdminDashboard onBack={() => setCurrentView('chat')} />
         ) : currentView === 'task-update' ? (
-          <TaskUpdateView 
-            onGetTasks={handleGetTasks} 
-            isLoading={taskLoading} 
+          <TaskUpdateView
+            onGetTasks={handleGetTasks}
+            isLoading={taskLoading}
             result={taskResult}
           />
         ) : (
-          <ChatArea 
+          <ChatArea
             session={currentSession}
             onNewChat={createNewChat}
             updateMessages={(msgs) => currentSessionId && updateMessages(currentSessionId, msgs)}

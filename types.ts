@@ -41,9 +41,22 @@ export interface WebhookResponse {
   message?: string;
 }
 
+export type TaskStatus = 'pending' | 'done' | 'stuck';
+
 export interface Task {
-  id: string;
-  name: string;
+  id: string;                           // Primary ID (e.g. "11292730872")
+  worker?: string;                      // Worker name
+  taskno?: string;                      // Task number (e.g. "2")
+  name: string;                         // Task name
+  dependsOn?: string;                   // Comma-separated task numbers
+  canWorkSimultaneously?: string;      // Comma-separated task numbers
+  unit?: string;                        // Location
+  expectedAssigningDate?: string;
+  expectedCompletionDate?: string;
+  estimatedHours?: string;
+  materialsNeeded?: string;
+  status: TaskStatus;
+  created_at?: string;
 }
 
 export interface WorkerTasks {
